@@ -1,0 +1,8 @@
+build/
+install/
+log/
+
+NEXT_STEPS.md
+
+__pycache__/
+*.pyc
