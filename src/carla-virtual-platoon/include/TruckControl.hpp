@@ -17,4 +17,5 @@ private:
     std::string steer_topic_name;
     std::string throttle_topic_name;
     bool initial_hand_brake;
+    float steer_input_max_deg;
 };

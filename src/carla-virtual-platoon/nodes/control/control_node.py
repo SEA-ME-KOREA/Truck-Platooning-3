@@ -30,17 +30,22 @@ class ControlNode(Node):
         self.declare_parameter("vehicle_cmd_throttle_topic", "vehicle_cmd/throttle")
         self.declare_parameter("vehicle_cmd_brake_topic", "vehicle_cmd/brake")
 
-        self.declare_parameter("steer_kp", 15.0)
+        self.declare_parameter("steer_kp", 12.0)
         self.declare_parameter("steer_ki", 0.0)
-        self.declare_parameter("steer_kd", 0.5)
-        self.declare_parameter("speed_kp", 0.25)
-        self.declare_parameter("speed_ki", 0.02)
+        self.declare_parameter("steer_kd", 0.18)
+        self.declare_parameter("speed_kp", 0.4)
+        self.declare_parameter("speed_ki", 0.03)
         self.declare_parameter("speed_kd", 0.0)
-        self.declare_parameter("emergency_distance", 4.0)
+        self.declare_parameter("emergency_distance", 7.0)
         self.declare_parameter("front_vehicle_topic", "perception/front_vehicle_distance")
         self.declare_parameter("max_steer_deg", 30.0)
         self.declare_parameter("max_throttle", 1.0)
         self.declare_parameter("max_brake", 1.0)
+        self.declare_parameter("steer_slowdown_start_deg", 1.2)
+        self.declare_parameter("steer_slowdown_factor", 0.30)
+        self.declare_parameter("stop_brake_speed_threshold", 1.0)
+        self.declare_parameter("overspeed_brake_margin", 0.5)
+        self.declare_parameter("overspeed_brake_gain", 0.22)
 
         self._state = "IDLE"
         self._target_speed = 0.0
@@ -129,12 +134,33 @@ class ControlNode(Node):
         steer = self._lateral.compute(self._target_steer_error, 0.05)
         signed_longitudinal = self._longitudinal.compute(self._target_speed, self._current_speed, 0.05)
 
+        stop_brake_speed_threshold = float(
+            self.get_parameter("stop_brake_speed_threshold").value
+        )
+        overspeed_brake_margin = float(self.get_parameter("overspeed_brake_margin").value)
+        overspeed_brake_gain = float(self.get_parameter("overspeed_brake_gain").value)
+
+        if self._target_speed <= 0.1 and self._current_speed > stop_brake_speed_threshold:
+            signed_longitudinal = -float(self.get_parameter("max_brake").value)
+        elif self._current_speed > (self._target_speed + overspeed_brake_margin):
+            overspeed = self._current_speed - self._target_speed
+            signed_longitudinal = min(
+                signed_longitudinal,
+                -min(float(self.get_parameter("max_brake").value), overspeed_brake_gain * overspeed),
+            )
+
         if self._front_vehicle_distance < float(self.get_parameter("emergency_distance").value):
             steer = 0.0
             signed_longitudinal = -float(self.get_parameter("max_brake").value)
 
         throttle = max(0.0, signed_longitudinal)
         brake = max(0.0, -signed_longitudinal)
+
+        steer_slowdown_start_deg = float(self.get_parameter("steer_slowdown_start_deg").value)
+        steer_slowdown_factor = float(self.get_parameter("steer_slowdown_factor").value)
+        if abs(steer) > steer_slowdown_start_deg:
+            throttle *= max(0.0, min(1.0, steer_slowdown_factor))
+
         self._publish_commands(steer, throttle, brake)
 
         # Preserve compatibility with the existing CARLA actuator bridge:

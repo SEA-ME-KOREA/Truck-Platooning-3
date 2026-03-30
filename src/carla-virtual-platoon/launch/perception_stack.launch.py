@@ -1,14 +1,11 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
 def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
-    yolo_enabled = LaunchConfiguration("yolo_enabled")
-    yolo_model = LaunchConfiguration("yolo_model")
     debug_visualization = LaunchConfiguration("debug_visualization")
     publish_debug_topics = LaunchConfiguration("publish_debug_topics")
     show_opencv_windows = LaunchConfiguration("show_opencv_windows")
@@ -17,8 +14,6 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("namespace", default_value="truck0"),
-            DeclareLaunchArgument("yolo_enabled", default_value="false"),
-            DeclareLaunchArgument("yolo_model", default_value="yolov8n.pt"),
             DeclareLaunchArgument("debug_visualization", default_value="false"),
             DeclareLaunchArgument("publish_debug_topics", default_value="true"),
             DeclareLaunchArgument("show_opencv_windows", default_value="false"),
@@ -37,15 +32,6 @@ def generate_launch_description():
                         "use_sliding_window_visualization": sliding_window_visualization,
                     }
                 ],
-            ),
-            Node(
-                package="carla-virtual-platoon",
-                executable="yolo_detection_node.py",
-                name="yolo_detection",
-                namespace=namespace,
-                output="screen",
-                condition=IfCondition(yolo_enabled),
-                parameters=[{"enabled": True, "model_path": yolo_model}],
             ),
         ]
     )

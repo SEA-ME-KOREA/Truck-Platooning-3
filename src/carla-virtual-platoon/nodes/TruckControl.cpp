@@ -8,6 +8,7 @@ TruckControl::TruckControl(boost::shared_ptr<carla::client::Vehicle> vehicle_)
     this->get_parameter_or("steer_topic_name",steer_topic_name,std::string("steer"));
     this->get_parameter_or("throttle_topic_name",throttle_topic_name,std::string("throttle"));
     this->get_parameter_or("initial_hand_brake",initial_hand_brake,true);
+    this->get_parameter_or("steer_input_max_deg", steer_input_max_deg, 30.0f);
 
 
     SteerSubscriber_ = this->create_subscription<std_msgs::msg::Float32>(steer_topic_name, 1, std::bind(&TruckControl::SteerSubCallback, this, std::placeholders::_1));
@@ -25,7 +26,8 @@ TruckControl::TruckControl(boost::shared_ptr<carla::client::Vehicle> vehicle_)
 
 
 void TruckControl::SteerSubCallback(const std_msgs::msg::Float32::SharedPtr msg) {
-    float control_value = ((msg->data * -1.0) / 140) * 2 ;
+    float max_deg = steer_input_max_deg > 1.0f ? steer_input_max_deg : 30.0f;
+    float control_value = msg->data / max_deg;
     if (control_value > 1.0) this->control.steer = 1.0f;
     else if (control_value < -1.0) this->control.steer = -1.0f;
     else this->control.steer = control_value;
@@ -35,9 +37,10 @@ void TruckControl::SteerSubCallback(const std_msgs::msg::Float32::SharedPtr msg)
 void TruckControl::ThrottleSubCallback(const std_msgs::msg::Float32::SharedPtr msg) {
     float control_value = msg->data;
     if (this->control.hand_brake == true ) {
-        if (control_value > 0.15f) {
+        if (control_value > 0.01f) {
             this->control.hand_brake = false;
             this->control.brake = 0.0f;
+            this->control.throttle = control_value;
         }
         else {
             this->control.throttle = 0.0f;

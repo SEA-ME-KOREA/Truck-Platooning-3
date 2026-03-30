@@ -1,82 +1,95 @@
-# Node Architecture (Perception / Planning / Control)
+# Node Architecture
 
-## Source Tree
-- `nodes/perception/`
-  - `autonomy_compact_node.py`
-  - `lane_detection_node.py`
-  - `lane_follower_legacy.py`
-  - `lidar_obstacle_node.py`
-  - `stop_line_detection_node.py`
-  - `yolo_detection_node.py`
-- `nodes/planning/`
-  - `behavior_fsm_node.py`
-- `nodes/control/`
-  - `controller_node.py`
-- `nodes/fleet/`
-  - `fleet_command_node.py`
+## Current Runtime Path
 
-## 1) Perception
-- `lane_detection_node.py`
-  - Subscribe: `front_camera`
-  - Publish: `perception/lane_center_offset`, `perception/lane_confidence`
-- `lidar_obstacle_node.py`
-  - Subscribe: `front_lidar`
-  - Publish: `perception/front_obstacle_distance`
-- `stop_line_detection_node.py`
-  - Subscribe: `front_camera`
-  - Publish: `perception/stop_line_detected`
-- `yolo_detection_node.py` (optional)
-  - Subscribe: `front_camera`
-  - Publish: `perception/detections_json`, `perception/traffic_light_state`
+The supported autonomy runtime is the structured stack:
 
-Launch:
+- `perception`: `nodes/perception/perception_node.py`
+- `planning`: `nodes/planning/planning_node.py`
+- `control`: `nodes/control/control_node.py`
+- `fleet`: `nodes/fleet/fleet_command_node.py`
+
+The supported map/runtime target is:
+
+- map: `Town04_Opt`
+- bridge launch: `launch/carla-virtual-platoon.launch.py`
+- autonomy launch: `launch/autonomy_fleet.launch.py`
+
+## Topic Contract
+
+Per truck namespace:
+
+- inputs from bridge
+  - `front_camera`
+  - `front_lidar`
+  - `velocity`
+
+- perception outputs
+  - `perception/lane_error`
+  - `perception/lane_curvature`
+  - `perception/lane_confidence`
+  - `perception/stop_line_detected`
+  - `perception/front_vehicle_distance`
+
+- planning outputs
+  - `planning/state`
+  - `planning/target_speed`
+  - `planning/target_steer_error`
+
+- control inputs
+  - `control/enabled`
+
+- control outputs
+  - `steer_control`
+  - `throttle_control`
+  - `brake_control`
+  - `vehicle_cmd/steer`
+  - `vehicle_cmd/throttle`
+  - `vehicle_cmd/brake`
+
+## Debug Topics
+
+Per truck namespace:
+
+- `perception/debug/raw_image`
+- `perception/debug/threshold_image`
+- `perception/debug/warp_image`
+- `perception/debug/histogram_image`
+- `perception/debug/sliding_window_image`
+- `perception/debug/lane_overlay_image`
+- `perception/debug/stop_line_image`
+
+Bird's-eye style lane debug is primarily:
+
+- `perception/debug/warp_image`
+- `perception/debug/sliding_window_image`
+
+## Launches
+
+Bridge and spawn:
+
 ```bash
-ros2 launch carla-virtual-platoon perception_stack.launch.py namespace:=truck0 yolo_enabled:=false
+ros2 launch carla-virtual-platoon carla-virtual-platoon.launch.py NumTrucks:=3 Map:=Town04_Opt
 ```
 
-## 2) Planning
-- `behavior_fsm_node.py`
-  - Subscribe:
-    - `perception/lane_confidence`
-    - `perception/front_obstacle_distance`
-    - `perception/traffic_light_state`
-    - `perception/stop_line_detected`
-  - Publish:
-    - `control/target_speed`
-    - `control/behavior_mode`
+Structured autonomy fleet:
 
-Launch:
 ```bash
-ros2 launch carla-virtual-platoon planning_stack.launch.py namespace:=truck0
+ros2 launch carla-virtual-platoon autonomy_fleet.launch.py num_trucks:=3 map_name:=Town04_Opt enable_control:=true enable_fleet_command:=true
 ```
 
-## 3) Control
-- `controller_node.py`
-  - Subscribe:
-    - `perception/lane_center_offset`
-    - `perception/lane_confidence`
-    - `perception/front_obstacle_distance`
-    - `control/target_speed`
-    - `control/behavior_mode`
-    - `control/enabled`
-    - `velocity`
-  - Publish:
-    - `steer_control`
-    - `throttle_control`
+Fleet commands:
 
-Launch:
-```bash
-ros2 launch carla-virtual-platoon control_stack.launch.py namespace:=truck0 enable_control:=true
+- `START`
+- `STOP`
+
+Command topic:
+
+```text
+/platoon/command
 ```
 
-## Integrated launch (structured)
+## Notes
 
-Single command to run Perception + Planning + Control:
-```bash
-ros2 launch carla-virtual-platoon autonomy_structured.launch.py namespace:=truck0 enable_control:=true
-```
-
-Optional fleet command node:
-```bash
-ros2 launch carla-virtual-platoon autonomy_structured.launch.py namespace:=truck0 enable_control:=true enable_fleet_command:=true num_trucks:=3
-```
+- `RESET` is not currently part of the stable runtime path because the Python `carla` module is not available in this environment.
+- Legacy nodes and launch paths remain in the repository for reference, but the current supported path is the structured stack above.

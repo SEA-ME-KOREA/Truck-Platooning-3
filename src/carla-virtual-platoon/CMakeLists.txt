@@ -77,23 +77,15 @@ install(TARGETS
 
 install(PROGRAMS
   nodes/perception/perception_node.py
-  nodes/perception/autonomy_compact_node.py
-  nodes/perception/lane_detection_node.py
-  nodes/perception/lane_follower_legacy.py
-  nodes/perception/yolo_detection_node.py
-  nodes/perception/lidar_obstacle_node.py
-  nodes/perception/stop_line_detection_node.py
   nodes/planning/planning_node.py
-  nodes/planning/behavior_fsm_node.py
   nodes/control/control_node.py
-  nodes/control/controller_node.py
   nodes/fleet/fleet_command_node.py
+  nodes/fleet/carla_pose_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(FILES
   nodes/perception/lane_detector.py
-  nodes/perception/stop_line_detector.py
   nodes/perception/front_vehicle_detector.py
   nodes/perception/debug_visualizer.py
   nodes/planning/behavior_fsm.py
@@ -102,6 +94,7 @@ install(FILES
   nodes/control/pid_controller.py
   nodes/control/lateral_controller.py
   nodes/control/longitudinal_controller.py
+  nodes/fleet/platoon_state.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

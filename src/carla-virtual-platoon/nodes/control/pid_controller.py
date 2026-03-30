@@ -15,8 +15,14 @@ class PIDController:
         self._prev_error = None
 
     def step(self, error: float, dt: float) -> float:
+        dt = max(1e-3, float(dt))
+        error = float(error)
+
+        if self._prev_error is None:
+            self._prev_error = error
+
         self._integral += error * dt
         self._integral = max(-self.integral_limit, min(self.integral_limit, self._integral))
-        derivative = 0.0 if self._prev_error is None or dt <= 0.0 else (error - self._prev_error) / dt
+        derivative = (error - self._prev_error) / dt
         self._prev_error = error
         return self.kp * error + self.ki * self._integral + self.kd * derivative

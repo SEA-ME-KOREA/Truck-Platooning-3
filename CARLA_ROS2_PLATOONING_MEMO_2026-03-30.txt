@@ -1,0 +1,70 @@
+CARLA ROS2 truck platooning memo - 2026-03-30
+
+Current status
+- CARLA was manually closed because long runtime caused lag.
+- We should restart from a clean runtime next time: tx -> start CARLA -> ts -> pad -> pls.
+
+Most recent stable code direction
+- Reverted most experimental steering/planning changes back close to the user's original baseline.
+- Current planning speed values are back to:
+  - cruise_speed = 3.0
+  - slow_speed = 2.2
+  - platoon_max_speed = 3.5
+- Current planning steering values are back to:
+  - steer_target_gain = 1.08
+  - steer_target_limit = 0.36
+  - steer_error_alpha = 0.90
+- Current planning confidence values are back to:
+  - lane_conf_threshold = 0.1
+  - lane_conf_stop_threshold = 0.08
+  - steer_enable_conf_threshold = 0.12
+- local_planner sign-flip experiment was reverted.
+
+Perception state currently restored near original values
+- lane_white_close_kernel_height = 17
+- warped_gap_close_kernel_height = 55
+- warped_gap_close_kernel_width = 7
+- lane_preview_y_ratio = 0.35
+- lane_far_preview_y_ratio = 0.18
+- lane_far_preview_weight = 0.4
+- warp_top_left_x_ratio = 0.28
+- warp_top_right_x_ratio = 0.72
+
+Control state currently active
+- steer_kp = 12.0
+- steer_kd = 0.18
+- steer_slowdown_start_deg = 1.2
+- steer_slowdown_factor = 0.30
+- This stronger slowdown-on-steer was kept because it reduced violent wall hits somewhat.
+
+What we learned today
+- Raising speed made instability worse, especially rear truck instability.
+- truck2 tended to fail first, but later truck0 also failed, so the root issue is not just platoon follow; common lane tracking/perception still destabilizes all trucks.
+- Numeric tuning alone became noisy; the next useful step is to inspect truck0 perception overlay/debug images first, then tune from visual evidence.
+
+Next recommended restart procedure
+1. Launch CARLA fresh.
+2. In shell A:
+   - exec bash
+   - source ~/.bashrc
+   - tx
+   - ts
+3. In shell B:
+   - exec bash
+   - source ~/.bashrc
+   - pad
+4. In shell C:
+   - exec bash
+   - source ~/.bashrc
+   - pls
+5. Immediately inspect truck0 lane debug overlay using:
+   - ros2f python3 /home/webebe/ros2_ws/tools/lane_debug_viewer.py --namespace truck0
+
+What to inspect first next time
+- raw_image
+- warp_image
+- sliding_window_image
+- lane_overlay_image
+
+Main question for next session
+- On truck0, is the detector locking onto real lane markings, road edge/shadow, or a wrong left/right lane pair when the truck starts drifting?

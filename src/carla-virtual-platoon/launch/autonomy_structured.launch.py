@@ -20,8 +20,6 @@ def _include(name: str, **kwargs):
 
 def generate_launch_description():
     namespace = LaunchConfiguration("namespace")
-    yolo_enabled = LaunchConfiguration("yolo_enabled")
-    yolo_model = LaunchConfiguration("yolo_model")
     enable_control = LaunchConfiguration("enable_control")
     enable_fleet_command = LaunchConfiguration("enable_fleet_command")
     num_trucks = LaunchConfiguration("num_trucks")
@@ -34,8 +32,6 @@ def generate_launch_description():
     return LaunchDescription(
         [
             DeclareLaunchArgument("namespace", default_value="truck0"),
-            DeclareLaunchArgument("yolo_enabled", default_value="false"),
-            DeclareLaunchArgument("yolo_model", default_value="yolov8n.pt"),
             DeclareLaunchArgument("debug_visualization", default_value="false"),
             DeclareLaunchArgument("publish_debug_topics", default_value="true"),
             DeclareLaunchArgument("show_opencv_windows", default_value="false"),
@@ -47,8 +43,6 @@ def generate_launch_description():
             _include(
                 "perception_stack.launch.py",
                 namespace=namespace,
-                yolo_enabled=yolo_enabled,
-                yolo_model=yolo_model,
                 debug_visualization=debug_visualization,
                 publish_debug_topics=publish_debug_topics,
                 show_opencv_windows=show_opencv_windows,

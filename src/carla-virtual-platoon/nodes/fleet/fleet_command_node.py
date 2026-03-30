@@ -43,19 +43,25 @@ class FleetCommandNode(Node):
         for i in range(int(self.get_parameter("num_trucks").value)):
             topic = f"/truck{i}/control/enabled"
             self._enable_pubs[i] = self.create_publisher(Bool, topic, 10)
+        self._fleet_enabled = False
 
         self.create_subscription(
             String, self.get_parameter("command_topic").value, self._on_command, 10
         )
+        self.create_timer(0.5, self._publish_current_enable_state)
         self.get_logger().info(
             f"fleet_command_node listening on {self.get_parameter('command_topic').value}"
         )
 
     def _publish_enable_all(self, enabled: bool) -> None:
+        self._fleet_enabled = enabled
         msg = Bool()
         msg.data = enabled
         for pub in self._enable_pubs.values():
             pub.publish(msg)
+
+    def _publish_current_enable_state(self) -> None:
+        self._publish_enable_all(self._fleet_enabled)
 
     def _on_command(self, msg: String) -> None:
         cmd = (msg.data or "").strip().upper()

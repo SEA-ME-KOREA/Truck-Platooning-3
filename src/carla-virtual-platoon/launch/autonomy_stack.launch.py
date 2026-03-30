@@ -8,8 +8,6 @@ from launch_ros.actions import Node
 
 def _generate_nodes(context):
     namespace = LaunchConfiguration("namespace").perform(context)
-    yolo_enabled = LaunchConfiguration("yolo_enabled").perform(context).lower() == "true"
-    model_path = LaunchConfiguration("yolo_model").perform(context)
     enable_fleet_command = (
         LaunchConfiguration("enable_fleet_command").perform(context).lower() == "true"
     )
@@ -82,14 +80,6 @@ def _generate_nodes(context):
         ),
         Node(
             package="carla-virtual-platoon",
-            executable="yolo_detection_node.py",
-            name="yolo_detection",
-            namespace=common_ns,
-            output="screen",
-            parameters=[{"enabled": yolo_enabled, "model_path": model_path}],
-        ),
-        Node(
-            package="carla-virtual-platoon",
             executable="fleet_command_node.py",
             name="fleet_command",
             output="screen",
@@ -110,14 +100,12 @@ def generate_launch_description():
             DeclareLaunchArgument("num_trucks", default_value="3"),
             DeclareLaunchArgument("map_name", default_value="Town04_Opt"),
             DeclareLaunchArgument("compact_mode", default_value="true"),
-            DeclareLaunchArgument("yolo_enabled", default_value="false"),
             DeclareLaunchArgument("enable_control", default_value="false"),
             DeclareLaunchArgument("enable_fleet_command", default_value="false"),
             DeclareLaunchArgument("debug_visualization", default_value="false"),
             DeclareLaunchArgument("publish_debug_topics", default_value="true"),
             DeclareLaunchArgument("show_opencv_windows", default_value="false"),
             DeclareLaunchArgument("sliding_window_visualization", default_value="true"),
-            DeclareLaunchArgument("yolo_model", default_value="yolov8n.pt"),
             OpaqueFunction(function=_generate_nodes),
         ]
     )

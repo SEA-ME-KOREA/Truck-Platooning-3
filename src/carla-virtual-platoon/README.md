@@ -1,6 +1,46 @@
 # Carla for Truck Platooning
 ![teaser](https://github.com/user-attachments/assets/ccd94e01-9b32-4b90-bb8e-bcfde2724d71)
 
+## Current Runtime
+
+The active runtime path in this workspace is:
+
+- map: `Town04_Opt`
+- bridge/spawn: `launch/carla-virtual-platoon.launch.py`
+- autonomy: `launch/autonomy_fleet.launch.py`
+- stack split: `perception -> planning -> control`
+
+Recommended run order:
+
+```bash
+ss
+cb
+ts
+pa
+pls
+```
+
+Stop:
+
+```bash
+plx
+```
+
+Lane debug viewer:
+
+```bash
+pv
+```
+
+The debug viewer shows:
+
+- raw image
+- warp image
+- sliding window image
+- lane overlay image
+
+See `NODE_ARCHITECTURE.md` for the current topic contract and supported runtime path.
+
 
 # System Requirements
 - **Ubuntu 20.04.** CARLA provides support for previous Ubuntu versions up to 16.04. **However** proper compilers are needed for Unreal Engine to work properly.
@@ -267,5 +307,6 @@ You can change the names and parameters of the sensors(camera,lidar,etc) inside 
   - `launch/planning_stack.launch.py`
   - `launch/control_stack.launch.py`
   - `launch/autonomy_structured.launch.py` (all three together)
+  - `launch/autonomy_fleet.launch.py` (truck0..truckN-1 together)
 - Detailed topic flow and role mapping:
   - `NODE_ARCHITECTURE.md`

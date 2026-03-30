@@ -8,6 +8,7 @@
 #include <thread>
 #include <tuple>
 #include <carla/client/ActorBlueprint.h>
+#include <carla/client/ActorList.h>
 #include <carla/client/BlueprintLibrary.h>
 #include <carla/client/Client.h>
 #include <carla/client/Map.h>

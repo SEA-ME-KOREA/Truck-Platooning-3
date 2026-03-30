@@ -7,7 +7,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Image, PointCloud2
-from std_msgs.msg import Bool, Float32
+from std_msgs.msg import Float32
 
 try:
     from cv_bridge import CvBridge
@@ -26,7 +26,6 @@ if CURRENT_DIR not in sys.path:
 from debug_visualizer import DebugImagePublisher
 from front_vehicle_detector import FrontVehicleDetector
 from lane_detector import SlidingWindowLaneDetector
-from stop_line_detector import StopLineDetector
 
 
 class PerceptionNode(Node):
@@ -38,7 +37,6 @@ class PerceptionNode(Node):
         self.declare_parameter("lane_error_topic", "perception/lane_error")
         self.declare_parameter("lane_curvature_topic", "perception/lane_curvature")
         self.declare_parameter("lane_confidence_topic", "perception/lane_confidence")
-        self.declare_parameter("stop_line_topic", "perception/stop_line_detected")
         self.declare_parameter("front_vehicle_distance_topic", "perception/front_vehicle_distance")
         self.declare_parameter("lane_offset_legacy_topic", "perception/lane_center_offset")
         self.declare_parameter("front_obstacle_legacy_topic", "perception/front_obstacle_distance")
@@ -53,38 +51,48 @@ class PerceptionNode(Node):
         self.declare_parameter("histogram_image_topic", "perception/debug/histogram_image")
         self.declare_parameter("sliding_window_image_topic", "perception/debug/sliding_window_image")
         self.declare_parameter("lane_overlay_image_topic", "perception/debug/lane_overlay_image")
-        self.declare_parameter("stop_line_debug_topic", "perception/debug/stop_line_image")
 
         self.declare_parameter("roi_y_ratio", 0.55)
+        self.declare_parameter("lane_white_lower_hsv", [0, 0, 180])
+        self.declare_parameter("lane_white_upper_hsv", [179, 70, 255])
+        self.declare_parameter("lane_white_close_kernel_height", 17)
+        self.declare_parameter("lane_white_open_kernel_size", 5)
+        self.declare_parameter("warped_gap_close_kernel_height", 55)
+        self.declare_parameter("warped_gap_close_kernel_width", 7)
+        self.declare_parameter("lane_error_alpha", 0.65)
+        self.declare_parameter("lane_preview_y_ratio", 0.35)
+        self.declare_parameter("lane_far_preview_y_ratio", 0.18)
+        self.declare_parameter("lane_far_preview_weight", 0.4)
+        self.declare_parameter("lane_half_width_ratio", 0.18)
+        self.declare_parameter("lane_min_width_ratio", 0.22)
+        self.declare_parameter("lane_max_width_ratio", 0.48)
+        self.declare_parameter("lane_center_bias_px", -28.0)
+        self.declare_parameter("lane_fit_conf_threshold", 0.03)
+        self.declare_parameter("lane_fallback_decay", 0.97)
         self.declare_parameter("lane_canny_low", 70)
         self.declare_parameter("lane_canny_high", 140)
         self.declare_parameter("lane_windows", 8)
+        self.declare_parameter("warp_top_y_ratio", 0.25)
+        self.declare_parameter("warp_top_left_x_ratio", 0.28)
+        self.declare_parameter("warp_top_right_x_ratio", 0.72)
+        self.declare_parameter("warp_bottom_left_x_ratio", 0.0)
+        self.declare_parameter("warp_bottom_right_x_ratio", 1.0)
+        self.declare_parameter("warp_dst_left_x_ratio", 0.18)
+        self.declare_parameter("warp_dst_right_x_ratio", 0.82)
         self.declare_parameter("lane_margin", 50)
         self.declare_parameter("lane_minpix", 20)
 
-        self.declare_parameter("max_distance", 50.0)
-        self.declare_parameter("roi_y_abs", 2.0)
+        self.declare_parameter("max_distance", 60.0)
+        self.declare_parameter("roi_y_abs", 3.2)
+        self.declare_parameter("roi_y_min", -1.6)
+        self.declare_parameter("roi_y_max", 1.6)
+        self.declare_parameter("front_vehicle_max_angle_deg", 35.0)
         self.declare_parameter("min_z", -2.0)
         self.declare_parameter("max_z", 3.0)
 
-        self.declare_parameter("white_lower_hsv", [0, 0, 192])
-        self.declare_parameter("white_upper_hsv", [179, 64, 255])
-        self.declare_parameter("pixel_threshold", 7000)
-        self.declare_parameter("roi_x_min", 40)
-        self.declare_parameter("roi_x_max", 600)
-        self.declare_parameter("roi_y_min", 400)
-        self.declare_parameter("roi_y_max", 470)
-        self.declare_parameter("binary_threshold", 50)
-        self.declare_parameter("consecutive_frames", 2)
-        self.declare_parameter("min_trigger_gap_sec", 1.0)
-
         self._bridge = CvBridge() if CvBridge else None
         self._lane_detector = SlidingWindowLaneDetector()
-        self._stop_line_detector = StopLineDetector()
         self._front_vehicle_detector = FrontVehicleDetector()
-
-        self._consecutive_stopline = 0
-        self._last_stopline_trigger = -1e9
 
         self._lane_error_pub = self.create_publisher(
             Float32, self.get_parameter("lane_error_topic").value, 10
@@ -97,9 +105,6 @@ class PerceptionNode(Node):
         )
         self._lane_offset_legacy_pub = self.create_publisher(
             Float32, self.get_parameter("lane_offset_legacy_topic").value, 10
-        )
-        self._stop_line_pub = self.create_publisher(
-            Bool, self.get_parameter("stop_line_topic").value, 10
         )
         self._front_vehicle_pub = self.create_publisher(
             Float32, self.get_parameter("front_vehicle_distance_topic").value, 10
@@ -117,7 +122,6 @@ class PerceptionNode(Node):
                 "histogram_image": self.get_parameter("histogram_image_topic").value,
                 "sliding_window_image": self.get_parameter("sliding_window_image_topic").value,
                 "lane_overlay_image": self.get_parameter("lane_overlay_image_topic").value,
-                "stop_line_binary_image": self.get_parameter("stop_line_debug_topic").value,
             },
         )
 
@@ -170,6 +174,31 @@ class PerceptionNode(Node):
         lane_result = self._lane_detector.detect(
             frame,
             roi_y_ratio=float(self.get_parameter("roi_y_ratio").value),
+            white_lower_hsv=self.get_parameter("lane_white_lower_hsv").value,
+            white_upper_hsv=self.get_parameter("lane_white_upper_hsv").value,
+            white_close_kernel_height=int(
+                self.get_parameter("lane_white_close_kernel_height").value
+            ),
+            white_open_kernel_size=int(self.get_parameter("lane_white_open_kernel_size").value),
+            warped_gap_close_kernel_height=int(self.get_parameter("warped_gap_close_kernel_height").value),
+            warp_top_y_ratio=float(self.get_parameter("warp_top_y_ratio").value),
+            warp_top_left_x_ratio=float(self.get_parameter("warp_top_left_x_ratio").value),
+            warp_top_right_x_ratio=float(self.get_parameter("warp_top_right_x_ratio").value),
+            warp_bottom_left_x_ratio=float(self.get_parameter("warp_bottom_left_x_ratio").value),
+            warp_bottom_right_x_ratio=float(self.get_parameter("warp_bottom_right_x_ratio").value),
+            warp_dst_left_x_ratio=float(self.get_parameter("warp_dst_left_x_ratio").value),
+            warp_dst_right_x_ratio=float(self.get_parameter("warp_dst_right_x_ratio").value),
+            warped_gap_close_kernel_width=int(self.get_parameter("warped_gap_close_kernel_width").value),
+            lane_error_alpha=float(self.get_parameter("lane_error_alpha").value),
+            preview_y_ratio=float(self.get_parameter("lane_preview_y_ratio").value),
+            far_preview_y_ratio=float(self.get_parameter("lane_far_preview_y_ratio").value),
+            far_preview_weight=float(self.get_parameter("lane_far_preview_weight").value),
+            lane_half_width_ratio=float(self.get_parameter("lane_half_width_ratio").value),
+            lane_min_width_ratio=float(self.get_parameter("lane_min_width_ratio").value),
+            lane_max_width_ratio=float(self.get_parameter("lane_max_width_ratio").value),
+            lane_center_bias_px=float(self.get_parameter("lane_center_bias_px").value),
+            fit_conf_threshold=float(self.get_parameter("lane_fit_conf_threshold").value),
+            fallback_decay=float(self.get_parameter("lane_fallback_decay").value),
             canny_low=int(self.get_parameter("lane_canny_low").value),
             canny_high=int(self.get_parameter("lane_canny_high").value),
             n_windows=int(self.get_parameter("lane_windows").value),
@@ -180,46 +209,17 @@ class PerceptionNode(Node):
                 self.get_parameter("use_sliding_window_visualization").value
             ),
         )
-        stop_result = self._stop_line_detector.detect(
-            frame,
-            white_lower_hsv=self.get_parameter("white_lower_hsv").value,
-            white_upper_hsv=self.get_parameter("white_upper_hsv").value,
-            pixel_threshold=int(self.get_parameter("pixel_threshold").value),
-            roi_x_min=int(self.get_parameter("roi_x_min").value),
-            roi_x_max=int(self.get_parameter("roi_x_max").value),
-            roi_y_min=int(self.get_parameter("roi_y_min").value),
-            roi_y_max=int(self.get_parameter("roi_y_max").value),
-            binary_threshold=int(self.get_parameter("binary_threshold").value),
-            use_debug_visualization=use_debug,
-        )
-
-        detected = stop_result.detected
-        if detected:
-            self._consecutive_stopline += 1
-        else:
-            self._consecutive_stopline = 0
-
-        stop_line_out = False
-        needed = max(1, int(self.get_parameter("consecutive_frames").value))
-        min_gap = float(self.get_parameter("min_trigger_gap_sec").value)
-        now_sec = self.get_clock().now().nanoseconds / 1e9
-        if self._consecutive_stopline >= needed and (now_sec - self._last_stopline_trigger) >= min_gap:
-            stop_line_out = True
-            self._last_stopline_trigger = now_sec
 
         self._lane_error_pub.publish(Float32(data=float(lane_result.lane_error)))
         self._lane_curvature_pub.publish(Float32(data=float(lane_result.lane_curvature)))
         self._lane_conf_pub.publish(Float32(data=float(lane_result.lane_confidence)))
         self._lane_offset_legacy_pub.publish(Float32(data=float(lane_result.lane_error)))
-        self._stop_line_pub.publish(Bool(data=bool(stop_line_out)))
 
         self._publish_debug_image("raw_image", frame)
         for key, image in lane_result.debug_images.items():
             self._publish_debug_image(key, image)
             if key in ("sliding_window_image", "lane_overlay_image"):
                 self._show_debug_window(key, image)
-        for key, image in stop_result.debug_images.items():
-            self._publish_debug_image(key, image)
 
     def _on_lidar(self, msg: PointCloud2) -> None:
         max_distance = float(self.get_parameter("max_distance").value)
@@ -236,6 +236,9 @@ class PerceptionNode(Node):
             points,
             max_distance=max_distance,
             roi_y_abs=float(self.get_parameter("roi_y_abs").value),
+            roi_y_min=float(self.get_parameter("roi_y_min").value),
+            roi_y_max=float(self.get_parameter("roi_y_max").value),
+            max_angle_deg=float(self.get_parameter("front_vehicle_max_angle_deg").value),
             min_z=float(self.get_parameter("min_z").value),
             max_z=float(self.get_parameter("max_z").value),
         )
